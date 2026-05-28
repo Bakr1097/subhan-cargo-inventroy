@@ -239,7 +239,6 @@ function HandoverSlip({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ShiftClient({
-  staffName,
   shiftStart,
   receivedParcels,
   releasedParcels,
