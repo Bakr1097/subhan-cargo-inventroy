@@ -32,7 +32,17 @@ export const parcels = pgTable('parcels', {
   updated_at: timestamp('updated_at').defaultNow(),
 })
 
-export type User = typeof users.$inferSelect
-export type NewUser = typeof users.$inferInsert
-export type Parcel = typeof parcels.$inferSelect
-export type NewParcel = typeof parcels.$inferInsert
+export const shift_closes = pgTable('shift_closes', {
+  id:               uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+  user_id:          uuid('user_id').references(() => users.id),
+  closed_at:        timestamp('closed_at').defaultNow(),
+  parcels_received: integer('parcels_received').notNull(),
+  parcels_released: integer('parcels_released').notNull(),
+  cash_collected:   numeric('cash_collected').notNull().default('0'),
+})
+
+export type User        = typeof users.$inferSelect
+export type NewUser     = typeof users.$inferInsert
+export type Parcel      = typeof parcels.$inferSelect
+export type NewParcel   = typeof parcels.$inferInsert
+export type ShiftClose  = typeof shift_closes.$inferSelect

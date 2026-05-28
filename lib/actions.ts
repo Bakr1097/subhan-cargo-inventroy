@@ -4,8 +4,8 @@ import { signIn, signOut, auth } from '@/auth'
 import { AuthError } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/db'
-import { users, parcels } from '@/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { users, parcels, shift_closes } from '@/db/schema'
+import { eq, and, gte, desc } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 
 export async function loginAction(
@@ -261,4 +261,88 @@ export async function releaseParcelAction(
     .where(eq(parcels.id, parcel_id))
 
   return { error: '', success: true, ts: Date.now() }
+}
+
+// ── Close Shift ───────────────────────────────────────────────────────────────
+
+export type ShiftSlip = {
+  staffName:       string
+  shiftStart:      string  // ISO
+  closedAt:        string  // ISO
+  parcelsReceived: number
+  parcelsReleased: number
+  cashCollected:   number
+}
+
+export async function closeShiftAction(): Promise<{ error: string; slip: ShiftSlip | null }> {
+  const session = await auth()
+  if (!session) return { error: 'Not authenticated', slip: null }
+
+  const userId = session.user.id
+
+  // Re-derive shift start server-side
+  const [lastClose] = await db
+    .select({ closed_at: shift_closes.closed_at })
+    .from(shift_closes)
+    .where(eq(shift_closes.user_id, userId))
+    .orderBy(desc(shift_closes.closed_at))
+    .limit(1)
+
+  let shiftStart: Date
+  if (lastClose?.closed_at) {
+    shiftStart = lastClose.closed_at
+  } else {
+    const [user] = await db
+      .select({ created_at: users.created_at })
+      .from(users)
+      .where(eq(users.id, userId))
+    shiftStart = user?.created_at ?? new Date(0)
+  }
+
+  // Re-count all totals server-side
+  const [received, released, toPay] = await Promise.all([
+    db.select({ id: parcels.id })
+      .from(parcels)
+      .where(and(eq(parcels.received_by, userId), gte(parcels.received_at, shiftStart))),
+    db.select({ id: parcels.id })
+      .from(parcels)
+      .where(and(eq(parcels.released_by, userId), gte(parcels.released_at, shiftStart))),
+    db.select({ cash_collected: parcels.cash_collected })
+      .from(parcels)
+      .where(and(
+        eq(parcels.released_by, userId),
+        eq(parcels.payment_type, 'TO_PAY'),
+        eq(parcels.status, 'RELEASED'),
+        gte(parcels.released_at, shiftStart),
+      )),
+  ])
+
+  const parcelsReceived = received.length
+  const parcelsReleased = released.length
+  const cashCollected   = toPay.reduce((s, r) => s + parseFloat(r.cash_collected ?? '0'), 0)
+
+  const now = new Date()
+
+  await db.insert(shift_closes).values({
+    user_id:          userId,
+    closed_at:        now,
+    parcels_received: parcelsReceived,
+    parcels_released: parcelsReleased,
+    cash_collected:   String(cashCollected),
+  })
+
+  revalidatePath('/shift')
+  revalidatePath('/admin/shifts')
+
+  return {
+    error: '',
+    slip: {
+      staffName:       session.user.name ?? 'Staff',
+      shiftStart:      shiftStart.toISOString(),
+      closedAt:        now.toISOString(),
+      parcelsReceived,
+      parcelsReleased,
+      cashCollected,
+    },
+  }
 }
