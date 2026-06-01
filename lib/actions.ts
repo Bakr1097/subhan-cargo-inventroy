@@ -5,7 +5,7 @@ import { AuthError } from 'next-auth'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/db'
 import { users, parcels, shift_closes } from '@/db/schema'
-import { eq, and, gte, desc } from 'drizzle-orm'
+import { eq, and, gte, desc, ne } from 'drizzle-orm'
 import bcrypt from 'bcryptjs'
 
 export async function loginAction(
@@ -168,6 +168,7 @@ export async function lookupParcelAction(
       payment_type: parcels.payment_type,
       amount_due: parcels.amount_due,
       status: parcels.status,
+      voided: parcels.voided,
       released_at: parcels.released_at,
       released_by_name: users.full_name,
     })
@@ -181,6 +182,10 @@ export async function lookupParcelAction(
   }
 
   const row = rows[0]
+
+  if (row.voided) {
+    return { error: 'This bilty has been voided by an admin and cannot be released', parcel: null }
+  }
 
   if (row.status === 'RELEASED') {
     const date = row.released_at
@@ -263,6 +268,43 @@ export async function releaseParcelAction(
   return { error: '', success: true, ts: Date.now() }
 }
 
+// ── Void Parcel ───────────────────────────────────────────────────────────────
+
+export async function voidParcelAction(
+  parcel_id: string,
+  reason: string
+): Promise<{ error: string }> {
+  const session = await auth()
+  if (!session || session.user.role !== 'ADMIN') return { error: 'Unauthorized' }
+
+  const trimmedReason = reason.trim()
+  if (!trimmedReason) return { error: 'Reason is required' }
+
+  const [parcel] = await db
+    .select({ id: parcels.id, voided: parcels.voided })
+    .from(parcels)
+    .where(eq(parcels.id, parcel_id))
+
+  if (!parcel) return { error: 'Parcel not found' }
+  if (parcel.voided) return { error: 'Parcel is already voided' }
+
+  await db
+    .update(parcels)
+    .set({
+      voided: true,
+      voided_by: session.user.id,
+      voided_at: new Date(),
+      void_reason: trimmedReason,
+      updated_at: new Date(),
+    })
+    .where(eq(parcels.id, parcel_id))
+
+  revalidatePath('/storehouse')
+  revalidatePath('/admin/voided')
+
+  return { error: '' }
+}
+
 // ── Close Shift ───────────────────────────────────────────────────────────────
 
 export type ShiftSlip = {
@@ -303,10 +345,10 @@ export async function closeShiftAction(): Promise<{ error: string; slip: ShiftSl
   const [received, released, toPay] = await Promise.all([
     db.select({ id: parcels.id })
       .from(parcels)
-      .where(and(eq(parcels.received_by, userId), gte(parcels.received_at, shiftStart))),
+      .where(and(eq(parcels.received_by, userId), gte(parcels.received_at, shiftStart), ne(parcels.voided, true))),
     db.select({ id: parcels.id })
       .from(parcels)
-      .where(and(eq(parcels.released_by, userId), gte(parcels.released_at, shiftStart))),
+      .where(and(eq(parcels.released_by, userId), gte(parcels.released_at, shiftStart), ne(parcels.voided, true))),
     db.select({ cash_collected: parcels.cash_collected })
       .from(parcels)
       .where(and(
@@ -314,6 +356,7 @@ export async function closeShiftAction(): Promise<{ error: string; slip: ShiftSl
         eq(parcels.payment_type, 'TO_PAY'),
         eq(parcels.status, 'RELEASED'),
         gte(parcels.released_at, shiftStart),
+        ne(parcels.voided, true),
       )),
   ])
 

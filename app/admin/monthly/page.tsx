@@ -2,7 +2,7 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/db'
 import { parcels, users } from '@/db/schema'
-import { eq, and, gte, lt, asc } from 'drizzle-orm'
+import { eq, and, gte, lt, asc, ne } from 'drizzle-orm'
 import Link from 'next/link'
 import { PrintButton } from '../reports/print-button'
 
@@ -56,7 +56,7 @@ export default async function MonthlyReportPage({
     })
     .from(parcels)
     .leftJoin(users, eq(parcels.received_by, users.id))
-    .where(and(gte(parcels.received_at, rangeStart), lt(parcels.received_at, rangeEnd)))
+    .where(and(gte(parcels.received_at, rangeStart), lt(parcels.received_at, rangeEnd), ne(parcels.voided, true)))
     .orderBy(asc(users.full_name)),
 
     // All parcels released in range
@@ -67,7 +67,7 @@ export default async function MonthlyReportPage({
     })
     .from(parcels)
     .leftJoin(users, eq(parcels.released_by, users.id))
-    .where(and(gte(parcels.released_at, rangeStart), lt(parcels.released_at, rangeEnd)))
+    .where(and(gte(parcels.released_at, rangeStart), lt(parcels.released_at, rangeEnd), ne(parcels.voided, true)))
     .orderBy(asc(users.full_name)),
 
     // TO_PAY parcels released in range (for cash totals)
@@ -84,6 +84,7 @@ export default async function MonthlyReportPage({
       eq(parcels.status, 'RELEASED'),
       gte(parcels.released_at, rangeStart),
       lt(parcels.released_at, rangeEnd),
+      ne(parcels.voided, true),
     ))
     .orderBy(asc(users.full_name)),
   ])

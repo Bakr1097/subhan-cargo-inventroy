@@ -2,13 +2,15 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/db'
 import { parcels, users } from '@/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { eq, and, desc, ne } from 'drizzle-orm'
 import Link from 'next/link'
 import { StorehouseClient } from './storehouse-client'
 
 export default async function StorehousePage() {
   const session = await auth()
   if (!session) redirect('/login')
+
+  const isAdmin = session.user.role === 'ADMIN'
 
   const rows = await db
     .select({
@@ -23,7 +25,7 @@ export default async function StorehousePage() {
     })
     .from(parcels)
     .leftJoin(users, eq(parcels.received_by, users.id))
-    .where(eq(parcels.status, 'IN_STORE'))
+    .where(and(eq(parcels.status, 'IN_STORE'), ne(parcels.voided, true)))
     .orderBy(desc(parcels.received_at))
 
   // Serialise dates to strings so they pass the server→client boundary cleanly
@@ -44,7 +46,7 @@ export default async function StorehousePage() {
         </span>
       </header>
 
-      <StorehouseClient rows={serialised} total={rows.length} />
+      <StorehouseClient rows={serialised} total={rows.length} isAdmin={isAdmin} />
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/db'
 import { parcels, users } from '@/db/schema'
-import { eq, and, gte, lt, asc } from 'drizzle-orm'
+import { eq, and, gte, lt, asc, ne } from 'drizzle-orm'
 import Link from 'next/link'
 import { PrintButton } from './print-button'
 
@@ -60,7 +60,7 @@ export default async function ReportsPage({
     })
     .from(parcels)
     .leftJoin(users, eq(parcels.received_by, users.id))
-    .where(and(gte(parcels.received_at, startDate), lt(parcels.received_at, endDate)))
+    .where(and(gte(parcels.received_at, startDate), lt(parcels.received_at, endDate), ne(parcels.voided, true)))
     .orderBy(asc(parcels.received_at)),
 
     // OUT events: parcels released on this date
@@ -73,7 +73,7 @@ export default async function ReportsPage({
     })
     .from(parcels)
     .leftJoin(users, eq(parcels.released_by, users.id))
-    .where(and(gte(parcels.released_at, startDate), lt(parcels.released_at, endDate)))
+    .where(and(gte(parcels.released_at, startDate), lt(parcels.released_at, endDate), ne(parcels.voided, true)))
     .orderBy(asc(parcels.released_at)),
 
     // TO_PAY parcels released on this date (for cash report)
@@ -93,6 +93,7 @@ export default async function ReportsPage({
       eq(parcels.status, 'RELEASED'),
       gte(parcels.released_at, startDate),
       lt(parcels.released_at, endDate),
+      ne(parcels.voided, true),
     ))
     .orderBy(asc(users.full_name), asc(parcels.released_at)),
   ])

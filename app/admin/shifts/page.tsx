@@ -2,7 +2,7 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { db } from '@/db'
 import { parcels, users, shift_closes } from '@/db/schema'
-import { eq, and, gte, desc, asc } from 'drizzle-orm'
+import { eq, and, gte, desc, asc, ne } from 'drizzle-orm'
 import Link from 'next/link'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export default async function AdminShiftsPage({
         received_at:  parcels.received_at,
       })
       .from(parcels)
-      .where(and(eq(parcels.received_by, userId), gte(parcels.received_at, start)))
+      .where(and(eq(parcels.received_by, userId), gte(parcels.received_at, start), ne(parcels.voided, true)))
       .orderBy(asc(parcels.received_at)),
 
       db.select({
@@ -115,7 +115,7 @@ export default async function AdminShiftsPage({
         released_at:    parcels.released_at,
       })
       .from(parcels)
-      .where(and(eq(parcels.released_by, userId), gte(parcels.released_at, start)))
+      .where(and(eq(parcels.released_by, userId), gte(parcels.released_at, start), ne(parcels.voided, true)))
       .orderBy(asc(parcels.released_at)),
 
       db.select({

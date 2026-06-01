@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, numeric, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, integer, numeric, timestamp, boolean } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const users = pgTable('users', {
@@ -28,6 +28,10 @@ export const parcels = pgTable('parcels', {
   receiver_cnic: text('receiver_cnic'),
   cash_collected: numeric('cash_collected'),
   location_id: text('location_id').default('main'),
+  voided: boolean('voided').notNull().default(false),
+  voided_by: uuid('voided_by').references(() => users.id),
+  voided_at: timestamp('voided_at'),
+  void_reason: text('void_reason'),
   created_at: timestamp('created_at').defaultNow(),
   updated_at: timestamp('updated_at').defaultNow(),
 })

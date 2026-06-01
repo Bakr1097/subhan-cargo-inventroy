@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { voidParcelAction } from '@/lib/actions'
 
 type Row = {
   id: string
@@ -13,8 +15,21 @@ type Row = {
   received_by_name: string | null
 }
 
-export function StorehouseClient({ rows, total }: { rows: Row[]; total: number }) {
+export function StorehouseClient({
+  rows,
+  total,
+  isAdmin,
+}: {
+  rows: Row[]
+  total: number
+  isAdmin: boolean
+}) {
+  const router = useRouter()
   const [query, setQuery] = useState('')
+  const [voidModal, setVoidModal] = useState<{ id: string; bilty_number: string } | null>(null)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidError, setVoidError] = useState('')
+  const [isPending, startTransition] = useTransition()
 
   const q = query.trim().toLowerCase()
   const filtered = q === ''
@@ -27,6 +42,33 @@ export function StorehouseClient({ rows, total }: { rows: Row[]; total: number }
   const today = new Date().toLocaleDateString('en-PK', {
     day: 'numeric', month: 'long', year: 'numeric',
   })
+
+  function openVoidModal(row: { id: string; bilty_number: string }) {
+    setVoidModal(row)
+    setVoidReason('')
+    setVoidError('')
+  }
+
+  function closeVoidModal() {
+    if (isPending) return
+    setVoidModal(null)
+    setVoidReason('')
+    setVoidError('')
+  }
+
+  function handleVoidConfirm() {
+    if (!voidReason.trim() || !voidModal) return
+    startTransition(async () => {
+      const result = await voidParcelAction(voidModal.id, voidReason.trim())
+      if (result.error) {
+        setVoidError(result.error)
+      } else {
+        setVoidModal(null)
+        setVoidReason('')
+        router.refresh()
+      }
+    })
+  }
 
   return (
     <>
@@ -105,11 +147,76 @@ export function StorehouseClient({ rows, total }: { rows: Row[]; total: number }
                     {row.received_by_name ? ` · ${row.received_by_name}` : ''}
                   </span>
                 </div>
+
+                {/* Void button — admin only, hidden on print */}
+                {isAdmin && (
+                  <div className="flex justify-end pt-1 print:hidden">
+                    <button
+                      onClick={() => openVoidModal({ id: row.id, bilty_number: row.bilty_number })}
+                      className="text-xs font-bold text-red-600 border border-red-300 px-3 py-1.5 rounded-lg active:bg-red-50"
+                    >
+                      Void
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </main>
+
+      {/* Void confirmation modal */}
+      {voidModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-xl">
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Void Bilty</h2>
+              <p className="text-sm font-mono text-gray-500 mt-0.5">{voidModal.bilty_number}</p>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 text-xs text-red-700 font-medium leading-relaxed">
+              This cannot be undone. The bilty will be permanently voided and removed from all reports.
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700 block mb-1.5">
+                Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={voidReason}
+                onChange={e => setVoidReason(e.target.value)}
+                placeholder="Enter reason for voiding…"
+                rows={3}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+                autoFocus
+              />
+            </div>
+
+            {voidError && (
+              <p className="text-sm text-red-600 font-medium">{voidError}</p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={closeVoidModal}
+                disabled={isPending}
+                className="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-xl text-sm active:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleVoidConfirm}
+                disabled={!voidReason.trim() || isPending}
+                className="flex-1 bg-red-600 text-white font-semibold py-3 rounded-xl text-sm active:opacity-80 disabled:opacity-50"
+              >
+                {isPending ? 'Voiding…' : 'Confirm Void'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </>
   )
 }
