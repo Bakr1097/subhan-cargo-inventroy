@@ -119,7 +119,7 @@ export async function receiveParcelAction(
     .where(and(eq(parcels.bilty_number, bilty_number), eq(parcels.status, 'IN_STORE')))
 
   if (existing) {
-    return { error: `Bilty "${bilty_number}" is already in the storehouse`, success: false }
+    return { error: 'A parcel with this bilty number is already in the storehouse.', success: false }
   }
 
   try {
@@ -136,7 +136,7 @@ export async function receiveParcelAction(
   } catch (err: unknown) {
     const e = err as { code?: string; cause?: { code?: string } }
     if (e?.code === '23505' || e?.cause?.code === '23505') {
-      return { error: 'A parcel with this bilty number already exists in the system.', success: false }
+      return { error: 'A parcel with this bilty number is already in the storehouse.', success: false }
     }
     throw err
   }

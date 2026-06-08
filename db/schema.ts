@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, numeric, timestamp, boolean } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, integer, numeric, timestamp, boolean, uniqueIndex } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const users = pgTable('users', {
@@ -13,7 +13,7 @@ export const users = pgTable('users', {
 
 export const parcels = pgTable('parcels', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  bilty_number: text('bilty_number').notNull().unique(),
+  bilty_number: text('bilty_number').notNull(),
   description: text('description').notNull(),
   units: integer('units').notNull().default(1),
   payment_type: text('payment_type').notNull(),        // 'PAID' | 'TO_PAY'
@@ -34,7 +34,11 @@ export const parcels = pgTable('parcels', {
   void_reason: text('void_reason'),
   created_at: timestamp('created_at').defaultNow(),
   updated_at: timestamp('updated_at').defaultNow(),
-})
+}, (table) => [
+  uniqueIndex('parcels_bilty_active_unique')
+    .on(table.bilty_number)
+    .where(sql`${table.status} = 'IN_STORE'`),
+])
 
 export const shift_closes = pgTable('shift_closes', {
   id:               uuid('id').primaryKey().default(sql`gen_random_uuid()`),
