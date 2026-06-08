@@ -134,8 +134,8 @@ export async function receiveParcelAction(
       location_id: 'main',
     })
   } catch (err: unknown) {
-    const code = (err as { code?: string })?.code
-    if (code === '23505') {
+    const e = err as { code?: string; cause?: { code?: string } }
+    if (e?.code === '23505' || e?.cause?.code === '23505') {
       return { error: 'A parcel with this bilty number already exists in the system.', success: false }
     }
     throw err
