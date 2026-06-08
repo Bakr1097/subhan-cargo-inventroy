@@ -122,16 +122,24 @@ export async function receiveParcelAction(
     return { error: `Bilty "${bilty_number}" is already in the storehouse`, success: false }
   }
 
-  await db.insert(parcels).values({
-    bilty_number,
-    description,
-    units,
-    payment_type,
-    amount_due: amount_due !== null ? String(amount_due) : null,
-    status: 'IN_STORE',
-    received_by: session.user.id,
-    location_id: 'main',
-  })
+  try {
+    await db.insert(parcels).values({
+      bilty_number,
+      description,
+      units,
+      payment_type,
+      amount_due: amount_due !== null ? String(amount_due) : null,
+      status: 'IN_STORE',
+      received_by: session.user.id,
+      location_id: 'main',
+    })
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code
+    if (code === '23505') {
+      return { error: 'A parcel with this bilty number already exists in the system.', success: false }
+    }
+    throw err
+  }
 
   return { error: '', success: true, ts: Date.now() }
 }
